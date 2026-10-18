@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Muro Entrevistador IA</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Entrevistador IA (Ingeniería Informática)</h1>
+      <p>
+        Pega una plantilla/oferta laboral y practica una entrevista técnica. El bot te hará
+        preguntas y podrás responder con audio.
+      </p>
+
+      <section class="card">
+        <label for="jobTemplate">Plantilla u oferta de trabajo</label>
+        <textarea id="jobTemplate" rows="8" placeholder="Ejemplo: Buscamos Ingeniero/a Informático/a con experiencia en APIs REST, bases de datos SQL, testing y cloud..."></textarea>
+        <button id="startInterview">Iniciar entrevista</button>
+      </section>
+
+      <section class="card" id="interviewSection" hidden>
+        <h2>Pregunta actual</h2>
+        <p id="currentQuestion" class="question"></p>
+
+        <div class="answer-actions">
+          <button id="recordAnswer">🎙️ Responder con audio</button>
+          <span id="recordStatus"></span>
+        </div>
+
+        <label for="answerText">Tu respuesta (transcripción editable)</label>
+        <textarea id="answerText" rows="5" placeholder="Tu respuesta aparecerá aquí..."></textarea>
+        <button id="submitAnswer">Enviar respuesta y siguiente pregunta</button>
+      </section>
+
+      <section class="card" id="historySection" hidden>
+        <h2>Historial de entrevista</h2>
+        <ol id="historyList"></ol>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

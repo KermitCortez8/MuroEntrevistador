@@ -1,0 +1,69 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f5f6f8;
+  color: #1b1f24;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+textarea {
+  width: 100%;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  resize: vertical;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0.5rem;
+  box-sizing: border-box;
+}
+
+button {
+  border: 0;
+  background: #0969da;
+  color: white;
+  border-radius: 6px;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.answer-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.question {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+ol {
+  padding-left: 1.25rem;
+}
+
+li {
+  margin-bottom: 0.75rem;
+}

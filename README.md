@@ -1,6 +1,7 @@
 # Muro Entrevistador 🎙️
 
-Aplicación en Python para practicar entrevistas de ingeniería con IA. Carga una
+Aplicación en Python con Google GenAI (`google-genai`) y Gemini para practicar
+entrevistas de ingeniería con IA. Carga una
 oferta laboral o una plantilla; el entrevistador hace una pregunta a la vez y
 adapta las siguientes a tus respuestas por audio. Sirve para distintas ramas de
 ingeniería, según el documento que proporciones.
@@ -8,7 +9,8 @@ ingeniería, según el documento que proporciones.
 ## Ejecutar
 
 Necesitas Python 3.11 o superior, conexión a Internet, un micrófono y una clave de
-OpenAI con acceso a los modelos configurados y saldo de API.
+Gemini de [Google AI Studio](https://aistudio.google.com/apikey) con acceso a los
+modelos configurados y cuota disponible.
 
 ```bash
 python -m venv .venv
@@ -19,9 +21,11 @@ cp .env.example .env
 # En Windows (PowerShell): Copy-Item .env.example .env
 ```
 
-Edita `.env` y coloca tu clave en `OPENAI_API_KEY`. También puedes introducirla
+Edita `.env` y coloca tu clave en `GEMINI_API_KEY`. También puedes introducirla
 en la barra lateral sin crear `.env`. No publiques tu clave; `.env` está excluido
-de Git.
+de Git. Se admite `GOOGLE_API_KEY` como alternativa; si existen ambas variables,
+`GEMINI_API_KEY` tiene prioridad. Una clave introducida en la interfaz tiene
+prioridad sobre ambas.
 
 ```bash
 streamlit run app.py
@@ -50,7 +54,9 @@ HTTPS (o localhost).
    limpia la sesión actual.
 
 El intercambio es por turnos: debes detener y enviar cada grabación. No hay
-escucha continua ni interrupciones en tiempo real. Cada audio admite hasta 24 MB.
+escucha continua ni interrupciones en tiempo real. Cada audio admite hasta 14 MB
+(14 MiB), para que la solicitud con el audio en base64 quede por debajo del límite
+de 20 MB de Gemini. No se utiliza la Files API ni se crean archivos remotos.
 Si una solicitud falla, conserva el turno y permite reintentar sin duplicar la
 respuesta. Las grabaciones y borradores de turnos anteriores se liberan al avanzar.
 
@@ -58,29 +64,34 @@ respuesta. Las grabaciones y borradores de turnos anteriores se liberan al avanz
 
 | Variable | Valor predeterminado | Uso |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | Sin valor | Credencial de API |
-| `OPENAI_CHAT_MODEL` | `gpt-4.1-mini` | Preguntas y evaluación con Responses API |
-| `OPENAI_TRANSCRIPTION_MODEL` | `gpt-4o-mini-transcribe` | Audio a texto |
-| `OPENAI_TTS_MODEL` | `gpt-4o-mini-tts` | Voz opcional del entrevistador |
+| `GEMINI_API_KEY` | Sin valor | Clave de Google AI Studio |
+| `GOOGLE_API_KEY` | Sin valor | Alternativa a `GEMINI_API_KEY` |
+| `GEMINI_CHAT_MODEL` | `gemini-3.8-flash` | Preguntas y evaluación |
+| `GEMINI_TRANSCRIPTION_MODEL` | `gemini-3.8-flash` | Transcripción del audio WAV |
+| `GEMINI_TTS_MODEL` | `gemini-3.8-flash-tts` | Voz opcional del entrevistador |
 
 Para cambiar un modelo, actualiza `.env` y reinicia Streamlit. La configuración
-se fija al iniciar cada entrevista. Los cargos y el acceso dependen de tu cuenta
-de API; una suscripción a ChatGPT no configura esta aplicación.
+se fija al iniciar cada entrevista. El SDK se importa con `from google import genai`
+y usa Gemini Developer API mediante `client.models.generate_content`. El historial
+usa los roles `user` y `model`, con las instrucciones en `system_instruction`.
+La voz predeterminada es Kore y se reproduce como WAV; también se convierte PCM
+a WAV si configuras un modelo TTS que devuelva audio sin cabecera. Las cuotas,
+la disponibilidad y los posibles cargos dependen de tu cuenta de Google.
 
-Documentación oficial usada: [generación de texto](https://developers.openai.com/api/docs/guides/text),
-[transcripción](https://developers.openai.com/api/docs/guides/speech-to-text),
-[síntesis de voz](https://developers.openai.com/api/docs/guides/text-to-speech) y
+Documentación oficial usada: [SDK de Google GenAI](https://googleapis.github.io/python-genai/),
+[audio y transcripción](https://ai.google.dev/gemini-api/docs/generate-content/audio),
+[síntesis de voz](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) y
 [grabación en Streamlit](https://docs.streamlit.io/develop/api-reference/widgets/st.audio_input).
 
 ## Datos y límites
 
-Los documentos se procesan localmente y su texto se envía a OpenAI con el
+Los documentos se procesan localmente y su texto se envía a Google con el
 historial necesario. Las grabaciones se envían al solicitar la transcripción;
 la pregunta se envía al solicitar voz. No se guardan audios ni entrevistas en
 disco y no hay base de datos; recargar o perder la sesión puede borrar el avance.
 La exportación incluye el texto de la oferta y la conversación, pero no la clave
-ni las grabaciones. Las llamadas de texto usan `store=False`; el tratamiento de
-datos del proveedor depende de su política y tu cuenta.
+ni las grabaciones. El tratamiento de datos del proveedor depende de sus políticas
+y de tu cuenta de Google.
 
 La evaluación es orientativa para practicar y puede contener errores. Esta
 versión está pensada para uso personal local; no incluye autenticación para un
@@ -104,6 +115,6 @@ manual usando una clave válida.
 app.py                       Interfaz Streamlit y grabación
 entrevistador/documents.py    Extracción y validación de ofertas
 entrevistador/interview.py    Proveedor de IA, historial y evaluación
-tests/                       Pruebas sin llamadas reales a OpenAI
+tests/                       Pruebas sin llamadas reales a Gemini
 examples/oferta_backend.md   Oferta de ejemplo para empezar
 ```

@@ -14,6 +14,8 @@ APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 @pytest.fixture(autouse=True)
 def ignore_local_credentials(monkeypatch):
     monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
 
 def button(app, label):
@@ -21,15 +23,35 @@ def button(app, label):
 
 
 def test_setup_requires_key(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     app = AppTest.from_file(APP_PATH).run()
     assert not app.exception
     assert button(app, "Comenzar entrevista").disabled
     assert len(app.info) == 1
 
 
+@pytest.mark.parametrize(
+    ("gemini_key", "google_key", "expected"),
+    [("gemini-test", "google-test", "gemini-test"), ("", "google-test", "google-test")],
+)
+def test_credentials_support_google_key_and_sidebar_override(
+    monkeypatch, gemini_key, google_key, expected
+):
+    monkeypatch.setenv("GEMINI_API_KEY", gemini_key)
+    monkeypatch.setenv("GOOGLE_API_KEY", google_key)
+    client_factory = MagicMock()
+    monkeypatch.setattr("google.genai.Client", client_factory)
+    app = AppTest.from_file(APP_PATH).run()
+    assert not app.exception
+    assert client_factory.call_args.kwargs["api_key"] == expected
+    assert client_factory.call_args.kwargs["vertexai"] is False
+    client_factory.return_value.close.assert_called_once()
+    app.text_input[0].input("sidebar-test").run()
+    assert not app.exception
+    assert client_factory.call_args.kwargs["api_key"] == "sidebar-test"
+
+
 def test_ui_start_answer_report_and_reset(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-real")
     provider = MagicMock()
     provider.generate.side_effect = ["¿Cómo diseñas una API?", "Evaluación de práctica"]
     monkeypatch.setattr(interview_module, "AIProvider", lambda *_: provider)
@@ -58,7 +80,7 @@ def test_ui_start_answer_report_and_reset(monkeypatch):
 
 
 def test_ui_keeps_draft_on_generation_error(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-real")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-real")
     provider = MagicMock()
     provider.generate.side_effect = ["Pregunta", InterviewError("Sin conexión"), "Repregunta"]
     monkeypatch.setattr(interview_module, "AIProvider", lambda *_: provider)

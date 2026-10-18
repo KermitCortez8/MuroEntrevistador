@@ -1,59 +1,73 @@
 """Ejercita el SDK real sobre un transporte HTTP local, sin acceder a la red."""
 
+import base64
 import json
 
 import httpx
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 from entrevistador.interview import AIProvider, Settings
 from tests.test_interview import wav_bytes
 
 
-def test_responses_transcription_and_speech_with_real_sdk():
+def test_gemini_text_transcription_and_speech_with_real_sdk():
     requests = []
+    data = wav_bytes()
 
     def handler(request):
         requests.append(request)
-        if request.url.path == "/v1/responses":
-            return httpx.Response(
-                200,
-                json={
-                    "id": "resp_test",
-                    "object": "response",
-                    "created_at": 1,
-                    "status": "completed",
-                    "model": "gpt-4.1-mini",
-                    "output": [
-                        {
-                            "id": "msg_test",
-                            "type": "message",
-                            "status": "completed",
-                            "role": "assistant",
-                            "content": [
-                                {"type": "output_text", "text": "Pregunta", "annotations": []}
-                            ],
-                        }
-                    ],
-                },
-            )
-        if request.url.path == "/v1/audio/transcriptions":
-            return httpx.Response(200, json={"text": "Respuesta oral"})
-        if request.url.path == "/v1/audio/speech":
-            return httpx.Response(200, content=b"mp3", headers={"Content-Type": "audio/mpeg"})
-        raise AssertionError(f"Unexpected request: {request.url}")
-
-    with OpenAI(
-        api_key="test-key-not-real",
-        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
-    ) as client:
-        provider = AIProvider(client, Settings())
-        assert (
-            provider.generate("Entrevista", [{"role": "user", "content": "Oferta"}]) == "Pregunta"
+        body = json.loads(request.content)
+        assert request.headers["x-goog-api-key"] == "test-key-not-real"
+        if "tts-model" in request.url.path:
+            parts = [
+                {"inlineData": {"mimeType": "audio/wav", "data": base64.b64encode(data).decode()}}
+            ]
+        elif "inlineData" in body["contents"][0]["parts"][0]:
+            parts = [{"text": "Respuesta oral"}]
+        else:
+            parts = [{"text": "Pregunta"}]
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {"content": {"role": "model", "parts": parts}, "finishReason": "STOP"}
+                ],
+            },
         )
-        assert provider.transcribe(wav_bytes(), "es") == "Respuesta oral"
-        assert provider.speak("Pregunta") == b"mp3"
 
-    assert json.loads(requests[0].content)["store"] is False
-    assert "multipart/form-data" in requests[1].headers["content-type"]
-    assert b"respuesta.wav" in requests[1].content
-    assert json.loads(requests[2].content)["response_format"] == "mp3"
+    with genai.Client(
+        api_key="test-key-not-real",
+        vertexai=False,
+        http_options=types.HttpOptions(
+            httpx_client=httpx.Client(transport=httpx.MockTransport(handler)),
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    ) as client:
+        provider = AIProvider(client, Settings(tts_model="tts-model"))
+        assert (
+            provider.generate(
+                "Entrevista",
+                [
+                    {"role": "user", "content": "Oferta"},
+                    {"role": "assistant", "content": "Pregunta anterior"},
+                    {"role": "user", "content": "Respuesta anterior"},
+                    {"role": "system", "content": "Continúa"},
+                ],
+            )
+            == "Pregunta"
+        )
+        assert provider.transcribe(data, "es") == "Respuesta oral"
+        assert provider.speak("Pregunta") == data
+
+    assert all(request.url.path.endswith(":generateContent") for request in requests)
+    question = json.loads(requests[0].content)
+    assert question["systemInstruction"]["parts"][0]["text"] == "Entrevista\n\nContinúa"
+    assert [content["role"] for content in question["contents"]] == ["user", "model", "user"]
+    blob = json.loads(requests[1].content)["contents"][0]["parts"][0]["inlineData"]
+    assert blob["mime_type"] == "audio/wav"
+    encoded_audio = blob["data"]
+    assert base64.urlsafe_b64decode(encoded_audio + "=" * (-len(encoded_audio) % 4)) == data
+    speech = json.loads(requests[2].content)["generationConfig"]
+    assert speech["responseModalities"] == ["AUDIO"]
+    assert speech["speechConfig"]["voice_config"]["voice"] == "Kore"

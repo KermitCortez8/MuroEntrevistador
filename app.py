@@ -5,7 +5,8 @@ from uuid import uuid4
 
 import streamlit as st
 from dotenv import load_dotenv
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 from entrevistador.documents import extract_document, validate_context
 from entrevistador.interview import AIProvider, Interview, InterviewError, Settings
@@ -21,19 +22,25 @@ def main():
 
     with st.sidebar:
         st.header("Tu sesión")
-        api_key = st.text_input(
-            "Clave de OpenAI",
-            type="password",
-            key="api_key",
-            help="También puedes configurar OPENAI_API_KEY en el archivo .env.",
-        ) or os.getenv("OPENAI_API_KEY", "")
-        st.caption("La API requiere una clave y saldo propios; el uso genera cargos en OpenAI.")
+        api_key = (
+            st.text_input(
+                "Clave de Gemini",
+                type="password",
+                key="api_key",
+                help="Configura GEMINI_API_KEY o GOOGLE_API_KEY en .env, o introduce tu clave aquí.",
+            )
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY", "")
+        )
+        st.caption(
+            "Usa una clave de Google AI Studio. Se aplican las cuotas y tarifas de tu cuenta."
+        )
         st.divider()
         st.write(
             "1. Agrega una oferta o plantilla.\n2. Escucha o lee la pregunta.\n3. Responde por audio."
         )
         st.caption(
-            "Al iniciar, el texto se envía a OpenAI. Al transcribir, también se envía el audio. "
+            "Al iniciar, el texto se envía a Google. Al transcribir, también se envía el audio. "
             "La aplicación mantiene la sesión en memoria y no guarda grabaciones en disco."
         )
         if interview and st.button("Nueva entrevista", use_container_width=True):
@@ -43,11 +50,22 @@ def main():
             st.rerun()
 
     settings = st.session_state.get("settings") or Settings(
-        chat_model=os.getenv("OPENAI_CHAT_MODEL") or "gpt-4.1-mini",
-        transcription_model=os.getenv("OPENAI_TRANSCRIPTION_MODEL") or "gpt-4o-mini-transcribe",
-        tts_model=os.getenv("OPENAI_TTS_MODEL") or "gpt-4o-mini-tts",
+        chat_model=os.getenv("GEMINI_CHAT_MODEL") or Settings.chat_model,
+        transcription_model=os.getenv("GEMINI_TRANSCRIPTION_MODEL") or Settings.transcription_model,
+        tts_model=os.getenv("GEMINI_TTS_MODEL") or Settings.tts_model,
     )
-    client = OpenAI(api_key=api_key, timeout=60.0, max_retries=1) if api_key else None
+    client = (
+        genai.Client(
+            api_key=api_key,
+            vertexai=False,
+            http_options=types.HttpOptions(
+                timeout=60_000,
+                retry_options=types.HttpRetryOptions(attempts=2),
+            ),
+        )
+        if api_key
+        else None
+    )
     provider = AIProvider(client, settings) if client else None
     try:
         if interview is None:
@@ -89,7 +107,7 @@ def setup(provider, settings):
     language = right.selectbox("Idioma de la entrevista", ["Español", "English"])
     limit = st.slider("Número de preguntas (incluye repreguntas)", 1, 15, 5)
     if provider is None:
-        st.info("Configura tu clave de OpenAI en la barra lateral o en .env para comenzar.")
+        st.info("Configura tu clave de Gemini en la barra lateral o en .env para comenzar.")
     if st.button("Comenzar entrevista", type="primary", disabled=provider is None):
         try:
             candidate = Interview(
@@ -131,7 +149,7 @@ def conversation(interview, provider):
         st.caption("Evaluación orientativa generada por IA para tu práctica personal.")
     else:
         if provider is None:
-            st.info("Agrega tu clave de OpenAI para continuar esta entrevista.")
+            st.info("Agrega tu clave de Gemini para continuar esta entrevista.")
         voice_key = f"voice_{turn}"
         if st.button("🔊 Escuchar pregunta", disabled=provider is None):
             try:
@@ -143,11 +161,12 @@ def conversation(interview, provider):
             except InterviewError as exc:
                 st.error(str(exc))
         if voice_key in st.session_state:
-            st.audio(st.session_state[voice_key], format="audio/mp3")
+            st.audio(st.session_state[voice_key], format="audio/wav")
         st.caption("La voz del entrevistador es generada por IA.")
         st.subheader("Tu respuesta")
         st.caption(
-            "Graba, detén la grabación y pulsa Transcribir. Puedes corregir el texto antes de enviarlo."
+            "Graba hasta 14 MB, detén la grabación y pulsa Transcribir. "
+            "Puedes corregir el texto antes de enviarlo."
         )
         audio = st.audio_input("Graba tu respuesta", key=f"audio_{turn}", sample_rate=16000)
         transcript_key = f"transcript_{turn}"

@@ -127,7 +127,15 @@ function renderQuestion() {
 
 function addHistoryItem(question, answer) {
   const li = document.createElement('li');
-  li.innerHTML = `<strong>Pregunta:</strong> ${question}<br /><strong>Respuesta:</strong> ${answer}`;
+  const questionLabel = document.createElement('strong');
+  questionLabel.textContent = 'Pregunta:';
+  const questionText = document.createTextNode(` ${question}`);
+  const lineBreak = document.createElement('br');
+  const answerLabel = document.createElement('strong');
+  answerLabel.textContent = 'Respuesta:';
+  const answerText = document.createTextNode(` ${answer}`);
+
+  li.append(questionLabel, questionText, lineBreak, answerLabel, answerText);
   historyListEl.appendChild(li);
 }
 

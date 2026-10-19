@@ -25,6 +25,11 @@ class Settings:
     chat_model: str = "gemini-3.8-flash"
     transcription_model: str = "gemini-3.8-flash"
     tts_model: str = "gemini-3.8-flash-tts"
+    chat_fallback_models: tuple[str, ...] = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+    transcription_fallback_models: tuple[str, ...] = (
+        "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"
+    )
+    tts_fallback_models: tuple[str, ...] = ("gemini-3.8-flash-lite-tts",)
 
 
 def api_error_message(error: errors.APIError | httpx.TransportError) -> str:
@@ -42,29 +47,58 @@ def api_error_message(error: errors.APIError | httpx.TransportError) -> str:
         return "Gemini alcanzó un límite de uso. Revisa tu cuota y vuelve a intentar."
     if error.code == 404:
         return "El modelo no está disponible para tu cuenta. Revisa los modelos en .env."
+    if error.code in {500, 502, 503, 504}:
+        return (
+            "Gemini está temporalmente saturado o no disponible. "
+            "Puedes reintentar sin perder tu avance."
+        )
     return "Gemini no pudo completar la solicitud. Puedes reintentar sin perder tu avance."
 
 
 class AIProvider:
-    def __init__(self, client: genai.Client, settings: Settings):
+    def __init__(
+        self, client: genai.Client, settings: Settings,
+        working_models: dict[str, str] | None = None,
+    ):
         self.client = client
         self.settings = settings
+        # La interfaz conserva esta selección entre turnos, sin retener el cliente HTTP.
+        self.working_models = working_models if working_models is not None else {}
 
-    def _request(self, model: str, contents, config: types.GenerateContentConfig):
-        try:
-            response = self.client.models.generate_content(
-                model=model,
-                contents=contents,
-                config=config,
-            )
-        except (errors.APIError, httpx.TransportError) as exc:
-            raise InterviewError(api_error_message(exc)) from exc
-        if (
-            not response.candidates
-            or response.candidates[0].finish_reason != types.FinishReason.STOP
-        ):
-            raise InterviewError("La IA no devolvió una respuesta completa. Vuelve a intentar.")
-        return response
+    def _request(
+        self, model: str, contents, config: types.GenerateContentConfig,
+        fallbacks: tuple[str, ...] = (),
+    ):
+        models = list(dict.fromkeys((model, *fallbacks)))
+        preferred = self.working_models.get(model)
+        if preferred in models:
+            models.remove(preferred)
+            models.insert(0, preferred)
+        for index, candidate in enumerate(models):
+            try:
+                response = self.client.models.generate_content(
+                    model=candidate,
+                    contents=contents,
+                    config=config,
+                )
+            except (errors.APIError, httpx.TransportError) as exc:
+                retryable = isinstance(exc, httpx.TransportError) or exc.code in {
+                    404, 408, 429, 500, 502, 503, 504
+                }
+                if retryable and index < len(models) - 1:
+                    continue
+                message = api_error_message(exc)
+                if retryable and len(models) > 1:
+                    message = f"Se probaron los modelos alternativos disponibles. {message}"
+                raise InterviewError(message) from exc
+            # No cambiar de modelo para eludir bloqueos de contenido o respuestas parciales.
+            if (
+                not response.candidates
+                or response.candidates[0].finish_reason != types.FinishReason.STOP
+            ):
+                raise InterviewError("La IA no devolvió una respuesta completa. Vuelve a intentar.")
+            self.working_models[model] = candidate
+            return response
 
     def generate(self, instructions: str, messages: list[dict[str, str]]) -> str:
         # Gemini recibe las instrucciones confiables por separado del contenido del candidato.
@@ -87,6 +121,7 @@ class AIProvider:
                 system_instruction="\n\n".join(system),
                 max_output_tokens=8192,
             ),
+            fallbacks=self.settings.chat_fallback_models,
         )
         text = (response.text or "").strip()
         if not text:
@@ -125,6 +160,7 @@ class AIProvider:
                 ),
                 max_output_tokens=8192,
             ),
+            fallbacks=self.settings.transcription_fallback_models,
         )
         text = (response.text or "").strip()
         if not text or text == "[SIN_VOZ]":
@@ -139,6 +175,7 @@ class AIProvider:
                 response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(voice="Kore")),
             ),
+            fallbacks=self.settings.tts_fallback_models,
         )
         content = response.candidates[0].content
         for part in (content.parts or []) if content else []:

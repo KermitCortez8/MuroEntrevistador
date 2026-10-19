@@ -265,3 +265,102 @@ def test_speech_rejects_missing_audio():
     client.models.generate_content.return_value = text_response("No audio")
     with pytest.raises(InterviewError, match="audio reproducible"):
         AIProvider(client, Settings()).speak("Pregunta")
+
+
+@pytest.mark.parametrize("code", [404, 408, 429, 500, 502, 503, 504])
+def test_unavailable_primary_uses_fallback_with_same_history(code):
+    client = MagicMock()
+    client.models.generate_content.side_effect = [
+        errors.APIError(code, {"error": {"message": "secret"}}),
+        text_response("Pregunta alternativa"),
+    ]
+    settings = Settings(chat_model="primary", chat_fallback_models=("backup",))
+    provider = AIProvider(client, settings)
+    assert provider.generate("Instrucciones", [{"role": "user", "content": OFFER}]) == (
+        "Pregunta alternativa"
+    )
+    first, second = client.models.generate_content.call_args_list
+    assert [first.kwargs["model"], second.kwargs["model"]] == ["primary", "backup"]
+    assert first.kwargs["contents"] == second.kwargs["contents"]
+    assert first.kwargs["config"] == second.kwargs["config"]
+
+
+def test_successful_fallback_survives_provider_recreation():
+    client = MagicMock()
+    client.models.generate_content.side_effect = [
+        errors.ServerError(503, {"error": {"message": "busy"}}),
+        text_response("Pregunta"), text_response("Repregunta"),
+    ]
+    working_models = {}
+    settings = Settings(chat_model="primary", chat_fallback_models=("backup",))
+    AIProvider(client, settings, working_models).generate("Instructions", [])
+    AIProvider(client, settings, working_models).generate("Instructions", [])
+    assert [call.kwargs["model"] for call in client.models.generate_content.call_args_list] == (
+        ["primary", "backup", "backup"]
+    )
+
+
+@pytest.mark.parametrize("code", [400, 401, 402, 403])
+def test_invalid_request_or_credentials_do_not_switch_models(code):
+    client = MagicMock()
+    client.models.generate_content.side_effect = errors.ClientError(
+        code, {"error": {"message": "secret"}}
+    )
+    with pytest.raises(InterviewError):
+        AIProvider(client, Settings()).generate("Instructions", [])
+    assert client.models.generate_content.call_count == 1
+
+
+def test_all_models_fail_without_committing_answer_and_can_retry():
+    client = MagicMock()
+    client.models.generate_content.side_effect = [
+        text_response("Primera pregunta"),
+        errors.ServerError(503, {"error": {"message": "secret"}}),
+        errors.ClientError(429, {"error": {"message": "secret"}}),
+        text_response("Informe"),
+    ]
+    settings = Settings(chat_model="primary", chat_fallback_models=("backup", "backup", "primary"))
+    provider = AIProvider(client, settings)
+    interview = Interview(OFFER, question_limit=1)
+    interview.start(provider)
+    with pytest.raises(InterviewError, match="modelos alternativos") as caught:
+        interview.answer(provider, "Mi respuesta")
+    assert "secret" not in str(caught.value)
+    assert interview.answered == 0
+    assert interview.report is None
+    interview.answer(provider, "Mi respuesta")
+    assert interview.answered == 1
+    assert interview.report == "Informe"
+
+
+def test_fallbacks_respect_audio_capabilities():
+    client = MagicMock()
+    data = wav_bytes()
+    client.models.generate_content.side_effect = [
+        errors.ServerError(503, {"error": {"message": "busy"}}),
+        text_response("Respuesta oral"),
+        errors.ServerError(503, {"error": {"message": "busy"}}),
+        audio_response(data, "audio/wav"),
+    ]
+    settings = Settings(
+        transcription_model="transcribe", transcription_fallback_models=("transcribe-backup",),
+        tts_model="voice", tts_fallback_models=("voice-backup",),
+    )
+    provider = AIProvider(client, settings)
+    assert provider.transcribe(data, "es") == "Respuesta oral"
+    assert provider.speak("Pregunta") == data
+    calls = client.models.generate_content.call_args_list
+    assert [call.kwargs["model"] for call in calls] == [
+        "transcribe", "transcribe-backup", "voice", "voice-backup"
+    ]
+    assert calls[0].kwargs["contents"] == calls[1].kwargs["contents"]
+    assert calls[2].kwargs["config"].response_modalities == ["AUDIO"]
+    assert calls[3].kwargs["config"].response_modalities == ["AUDIO"]
+
+
+def test_timeout_switches_to_next_model():
+    client = MagicMock()
+    client.models.generate_content.side_effect = [httpx.ReadTimeout("secret"), text_response()]
+    provider = AIProvider(client, Settings(chat_fallback_models=("backup",)))
+    assert provider.generate("Instructions", []) == "Respuesta"
+    assert client.models.generate_content.call_count == 2

@@ -1,9 +1,1 @@
-{
-  "remote.portsAttributes": {
-    "8501": {
-      "label": "Muro · Entrevistador",
-      "protocol": "http",
-      "onAutoForward": "notify"
-    }
-  }
-}
+{}

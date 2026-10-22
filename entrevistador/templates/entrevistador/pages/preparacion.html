@@ -1,0 +1,31 @@
+{% extends 'entrevistador/base.html' %}
+{% block content %}
+{% if interview %}
+<section class="card resume-card">
+  <div class="resume-art" aria-hidden="true">{% if interview.report != None %}✓{% else %}↗{% endif %}</div>
+  <div><p class="eyebrow">{% if interview.report != None %}PRÁCTICA COMPLETADA{% else %}CONTINÚA DONDE LO DEJASTE{% endif %}</p><h2>{% if interview.report != None %}Tu evaluación está lista.{% else %}Tu entrevista te espera.{% endif %}</h2><p class="muted">{{ interview.answered }} de {{ interview.question_limit }} respuestas · {{ interview.level }} · {% if interview.language == 'es' %}Español{% else %}English{% endif %}</p><a class="btn btn-primary" href="{% if interview.report != None %}{% url 'evaluacion' %}{% else %}{% url 'practica' %}{% endif %}">{% if interview.report != None %}Ver mi evaluación{% else %}Continuar entrevista{% endif %} <span aria-hidden="true">→</span></a></div>
+</section>
+<details class="context-details"><summary>Ver oferta de esta práctica</summary><div class="context-text">{{ interview.context }}</div></details>
+<form method="post" action="{% url 'accion' %}" data-confirm="Se borrará esta práctica y sus borradores para empezar desde cero.">{% csrf_token %}<input type="hidden" name="turn" value="{{ session.turn }}"><button name="action" value="reset" class="btn btn-link">Empezar otra entrevista</button></form>
+{% else %}
+<form method="post" action="{% url 'accion' %}" enctype="multipart/form-data" data-draft="preparacion" data-saved-document="{{ session.preparation.document_name }}" class="preparation-grid row g-4">
+  {% csrf_token %}<input type="hidden" name="turn" value="{{ session.turn }}">
+  <div class="col-12 col-lg-7"><section class="card offer-card h-100">
+    <div class="card-heading"><span class="step-number">01</span><div><h2>El puesto al que apuntas</h2><p>Las preguntas se adaptan a lo que buscas.</p></div></div>
+    <label for="id_context">Oferta laboral o plantilla</label>
+    <textarea class="form-control" id="id_context" name="context" maxlength="20000" rows="10" placeholder="Pega aquí la oferta o los temas que quieres practicar.&#10;&#10;Incluye las responsabilidades, herramientas y experiencia que pide el puesto.">{{ session.preparation.context }}</textarea>
+    <div class="field-meta"><span>Al menos 40 caracteres</span><span data-count-for="id_context">{{ session.preparation.context|length }} / 20 000</span></div>
+    <div class="upload-area"><label for="id_document"><span class="upload-icon" aria-hidden="true">↑</span><span><strong>¿La tienes en un archivo?</strong><span>TXT, MD, PDF o DOCX · hasta 5 MB</span></span></label><input class="form-control" id="id_document" type="file" name="document" accept=".txt,.md,.pdf,.docx"><p class="file-feedback" id="document-feedback" role="status">{% if session.preparation.document_name %}Documento conservado: {{ session.preparation.document_name }}{% endif %}</p></div>
+    <p class="small">Si cargas un archivo, usaremos su contenido para la entrevista.</p>
+  </section></div>
+  <div class="col-12 col-lg-5"><div class="preparation-side">
+    <section class="card settings-card"><div class="card-heading"><span class="step-number">02</span><div><h2>A tu medida</h2><p>Tú eliges el ritmo.</p></div></div>
+      <div class="fields-row"><div><label for="id_level">Nivel</label>{{ preparation_form.level }}</div><div><label for="id_language">Idioma</label>{{ preparation_form.language }}</div></div>
+      <div class="fields-row"><div><label for="id_question_limit">Preguntas</label>{{ preparation_form.question_limit }}</div><div><label for="id_mode">Responder por</label>{{ preparation_form.mode }}</div></div>
+      <p class="small">Entre 1 y 15 preguntas. Puedes cambiar entre texto y audio al responder.</p>
+      <button type="submit" name="action" value="start" class="w-100 primary-action btn btn-primary" {% if not connected %}disabled{% endif %}>Comenzar entrevista <span aria-hidden="true">→</span></button>
+    </section>
+    <aside class="journey-card"><p class="eyebrow">ASÍ SERÁ TU PRÁCTICA</p><ol><li><span>1</span><div><strong>Una pregunta a la vez</strong><p>Basada en la oferta que compartiste.</p></div></li><li><span>2</span><div><strong>Responde a tu manera</strong><p>Por texto o voz, sin prisa.</p></div></li><li><span>3</span><div><strong>Llévate un siguiente paso</strong><p>Una evaluación con ejemplos para mejorar.</p></div></li></ol></aside>
+  </div></div>
+</form>
+{% endif %}{% endblock %}

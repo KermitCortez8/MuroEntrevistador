@@ -6,6 +6,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
-.streamlit/secrets.toml
 *.egg-info/
 
+
+.muro/
+staticfiles/
+*.sqlite3
+*.sqlite3-*
+artifacts/

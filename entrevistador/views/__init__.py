@@ -1,1 +1,1 @@
-"""Vistas Streamlit de cada página y componentes compartidos."""
+"""Páginas, acciones y archivos de la interfaz Django."""

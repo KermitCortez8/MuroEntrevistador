@@ -1,0 +1,39 @@
+{% load static %}<!doctype html>
+<html lang="es" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101e25">
+  <title>{{ title }} · Muro</title>
+  <link rel="stylesheet" href="{% static 'entrevistador/vendor/bootstrap/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'entrevistador/css/app.css' %}">
+  <script src="{% static 'entrevistador/js/app.js' %}" defer></script>
+</head>
+<body class="page-{{ section }}">
+<a class="skip-link" href="#contenido">Ir al contenido</a>
+<header class="site-header">
+  <div class="header-inner container-xxl">
+    <a class="brand" href="{% url 'preparacion' %}" aria-label="Muro · Inicio"><span class="brand-icon" aria-hidden="true">m</span>muro<span class="brand-dot" aria-hidden="true">.</span></a>
+    <nav class="flow-nav" aria-label="Pasos de la entrevista">
+      <a href="{% url 'preparacion' %}" {% if section == 'preparacion' %}aria-current="page"{% endif %}><span class="nav-number">1</span><span>Preparar</span></a>
+      <span class="nav-line" aria-hidden="true"></span>
+      <a href="{% url 'practica' %}" {% if section == 'practica' %}aria-current="page"{% endif %}><span class="nav-number">2</span><span>Practicar</span></a>
+      <span class="nav-line" aria-hidden="true"></span>
+      <a href="{% url 'evaluacion' %}" {% if section == 'evaluacion' %}aria-current="page"{% endif %}><span class="nav-number">3</span><span>Evaluación</span></a>
+    </nav>
+    <a class="history-link" href="{% url 'historial' %}" {% if section == 'historial' %}aria-current="page"{% endif %}>Mi conversación <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
+<main id="contenido" class="page-shell container-xxl">
+  <div class="page-heading">
+    <div><p class="eyebrow">{% block eyebrow %}TU ESPACIO DE PRÁCTICA{% endblock %}</p><h1>{% block heading %}Tu próxima entrevista<br>empieza con una buena práctica.{% endblock %}</h1><p class="intro">{% block intro %}Comparte la oferta, elige cómo practicar y da el primer paso.{% endblock %}</p></div>
+    {% block heading_side %}<div class="hero-note"><span class="hero-spark" aria-hidden="true">✳</span><p>Practica a tu ritmo.<br><strong>Llega con más confianza.</strong></p></div>{% endblock %}
+  </div>
+  {% for message in messages %}<div class="notice {{ message.tags }}" role="alert"><span aria-hidden="true">{% if message.tags == 'error' %}!{% else %}✓{% endif %}</span><p>{{ message }}</p></div>{% endfor %}
+  {% if needs_connection %}<div class="notice" role="status"><span aria-hidden="true">i</span><p>La práctica todavía no está disponible. Configura <code>GEMINI_API_KEY</code> en <code>.env</code> y reinicia el servidor.</p></div>{% endif %}
+  <div class="save-indicator"><span id="live-status" role="status" aria-live="polite"></span></div>
+  <div id="processing" class="processing" role="status" hidden><span class="spinner" aria-hidden="true"></span><div><strong id="processing-title">Un momento…</strong><p>Tu práctica sigue aquí. Espera sin cerrar esta página.</p></div></div>
+  {% block content %}{% endblock %}
+  <footer><span class="footer-brand">muro<span>.</span> <span>Un paso más cerca.</span></span><details><summary>Sobre esta práctica</summary><p>La oferta y tus respuestas se envían a la IA para practicar. Tu sesión y los audios se guardan temporalmente en este servidor. La evaluación es orientativa.</p></details></footer>
+</main>
+<dialog id="confirm-dialog" aria-labelledby="confirm-title"><form method="dialog"><span class="dialog-icon" aria-hidden="true">↻</span><h2 id="confirm-title">¿Quieres continuar?</h2><p id="confirm-message"></p><div class="dialog-actions"><button type="button" class="btn btn-outline-light" id="confirm-cancel">Seguir practicando</button><button class="btn btn-primary" type="button" id="confirm-accept">Sí, continuar</button></div></form></dialog>
+</body></html>
